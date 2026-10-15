@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // Insert Google Fonts dynamically for premium editorial typography
 if (typeof document !== 'undefined' && !document.getElementById('sakhie-fonts')) {
@@ -9,7 +9,7 @@ if (typeof document !== 'undefined' && !document.getElementById('sakhie-fonts'))
   document.head.appendChild(link);
 }
 
-// Deeply Enriched Health Guide Topics with Warm Editorial Artwork
+// Deeply Enriched Health Guide Topics
 const HEALTH_TOPICS = [
   {
     id: 'menstrual',
@@ -301,7 +301,7 @@ const HEALTH_TOPICS = [
   }
 ];
 
-// Symptom Categories
+// Categorized Symptom Options
 const SYMPTOM_CATEGORIES = [
   {
     category: "Menstrual & Hormonal 🌸",
@@ -334,21 +334,105 @@ const SYMPTOM_CATEGORIES = [
   }
 ];
 
+// Quick Prompts for Chat Starter
+const QUICK_QUESTIONS = [
+  "How can I manage PCOS fatigue naturally?",
+  "What foods help ease period cramp pain?",
+  "How do I calculate my fertile window?",
+  "What are early signs of perimenopause?"
+];
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('health'); // 'health', 'chat', 'about'
   const [selectedTopic, setSelectedTopic] = useState(null);
-  const [selectedSymptoms, setSelectedSymptoms] = useState([]);
-  const [waterLitres, setWaterLitres] = useState(0);
+  
+  // LocalStorage state initialization
+  const [selectedSymptoms, setSelectedSymptoms] = useState(() => {
+    const saved = localStorage.getItem('sakhie_symptoms');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  const [waterLitres, setWaterLitres] = useState(() => {
+    const saved = localStorage.getItem('sakhie_water');
+    return saved ? parseFloat(saved) : 0;
+  });
+
+  const [lastPeriodDate, setLastPeriodDate] = useState(() => {
+    return localStorage.getItem('sakhie_period_date') || '';
+  });
+
+  const [cycleLength, setCycleLength] = useState(() => {
+    return parseInt(localStorage.getItem('sakhie_cycle_length') || '28', 10);
+  });
+
   const [searchQuery, setSearchQuery] = useState('');
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
-  const [messages, setMessages] = useState([
-    {
-      sender: 'sakhie',
-      text: 'Namaste! I am Sakhie, your empathetic companion for women\'s health and wellness. Select symptoms above or ask me anything privately.'
-    }
-  ]);
+  const [copyNotice, setCopyNotice] = useState(false);
+
+  const [messages, setMessages] = useState(() => {
+    const saved = localStorage.getItem('sakhie_messages');
+    return saved ? JSON.parse(saved) : [
+      {
+        sender: 'sakhie',
+        text: 'Namaste! I am Sakhie, your empathetic companion for women\'s health and wellness. Select symptoms above or ask me anything privately.'
+      }
+    ];
+  });
+
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Sync to localStorage
+  useEffect(() => {
+    localStorage.setItem('sakhie_symptoms', JSON.stringify(selectedSymptoms));
+  }, [selectedSymptoms]);
+
+  useEffect(() => {
+    localStorage.setItem('sakhie_water', waterLitres.toString());
+  }, [waterLitres]);
+
+  useEffect(() => {
+    localStorage.setItem('sakhie_period_date', lastPeriodDate);
+  }, [lastPeriodDate]);
+
+  useEffect(() => {
+    localStorage.setItem('sakhie_cycle_length', cycleLength.toString());
+  }, [cycleLength]);
+
+  useEffect(() => {
+    localStorage.setItem('sakhie_messages', JSON.stringify(messages));
+  }, [messages]);
+
+  // Calculate cycle info
+  const getCycleInfo = () => {
+    if (!lastPeriodDate) return null;
+    const start = new Date(lastPeriodDate);
+    const today = new Date();
+    const diffTime = today - start;
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (isNaN(diffDays) || diffDays < 0) return null;
+    
+    const currentDay = (diffDays % cycleLength) + 1;
+    let phase = 'Follicular Phase 🌿';
+    let description = 'Energy is rising. Great time for strength workouts and key focus work.';
+
+    if (currentDay <= 5) {
+      phase = 'Menstrual Phase 🩸';
+      description = 'Rest and recharge. Focus on warm nourishing meals and hydration.';
+    } else if (currentDay >= 12 && currentDay <= 16) {
+      phase = 'Ovulatory Phase ✨';
+      description = 'Peak energy and communication. Fertile window is active.';
+    } else if (currentDay > 16) {
+      phase = 'Luteal Phase 🌙';
+      description = 'Progesterone rises. Prioritize magnesium, grounding routines, and gentle sleep hygiene.';
+    }
+
+    const daysUntilNext = cycleLength - currentDay + 1;
+    return { currentDay, phase, description, daysUntilNext };
+  };
+
+  const cycleInfo = getCycleInfo();
 
   const toggleSymptom = (symptomId) => {
     setSelectedSymptoms((prev) =>
@@ -362,10 +446,33 @@ export default function App() {
     setWaterLitres((prev) => Math.max(0, parseFloat((prev + delta).toFixed(2))));
   };
 
+  const handleResetLog = () => {
+    if (window.confirm("Reset today's logged symptoms and hydration?")) {
+      setSelectedSymptoms([]);
+      setWaterLitres(0);
+    }
+  };
+
+  const handleCopyLog = () => {
+    const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const logSummary = `Sakhie Daily Health Summary (${dateStr}):
+- Hydration: ${waterLitres} L / 2.25 L
+- Logged Symptoms: ${selectedSymptoms.length > 0 ? selectedSymptoms.join(', ') : 'None selected'}
+- Cycle Info: ${cycleInfo ? `${cycleInfo.phase} (Day ${cycleInfo.currentDay} of${cycleLength})` : 'Not configured'}`;
+
+    navigator.clipboard.writeText(logSummary);
+    setCopyNotice(true);
+    setTimeout(() => setCopyNotice(false), 3000);
+  };
+
   const handleAskSakhie = (topicTitle) => {
     setActiveTab('chat');
     const topicPrompt = `I would like to learn more about ${topicTitle}. What key things should I know?`;
     setInput(topicPrompt);
+  };
+
+  const handleQuickQuestion = (questionText) => {
+    setInput(questionText);
   };
 
   const handleSend = async (e) => {
@@ -377,8 +484,11 @@ export default function App() {
     if (waterLitres > 0) {
       currentSymptoms.push(`Water Hydration: ${waterLitres}L / 2.25L`);
     }
-    setInput('');
+    if (cycleInfo) {
+      currentSymptoms.push(`Cycle Phase: ${cycleInfo.phase} (Day ${cycleInfo.currentDay})`);
+    }
 
+    setInput('');
     const displayUserMsg = userText || `Logged today: ${currentSymptoms.join(', ')}`;
     setMessages((prev) => [...prev, { sender: 'user', text: displayUserMsg }]);
     setLoading(true);
@@ -411,8 +521,8 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#F7F5EC', color: '#2D3B36', fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
       
-      {/* Header */}
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 60px', backgroundColor: '#F7F5EC', borderBottom: '1px solid #EBE8DF', sticky: 'top', top: 0, zIndex: 10 }}>
+      {/* Navigation Header */}
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 60px', backgroundColor: '#F7F5EC', borderBottom: '1px solid #EBE8DF', position: 'sticky', top: 0, zIndex: 10 }}>
         
         <div 
           style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} 
@@ -859,24 +969,83 @@ export default function App() {
         </main>
       )}
 
-      {/* Interactive Chat Workspace View */}
+      {/* Interactive Chat & Symptom Logging Workspace View */}
       {activeTab === 'chat' && (
         <main style={{ maxWidth: '960px', margin: '0 auto', padding: '24px 20px 60px 20px' }}>
           
-          <div style={{ backgroundColor: '#FFFFFF', padding: '24px', borderRadius: '24px', marginBottom: '24px', border: '1px solid #EBE8DF', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+          {/* Cycle Phase Tracker Card */}
+          <div style={{ backgroundColor: '#FFFFFF', padding: '20px 24px', borderRadius: '24px', marginBottom: '20px', border: '1px solid #EBE8DF', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+              <div>
+                <h4 style={{ margin: '0 0 4px 0', fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', color: '#2D3B36' }}>
+                  Cycle Phase Tracker 🗓️
+                </h4>
+                {cycleInfo ? (
+                  <div style={{ fontSize: '13px', color: '#5A6B65' }}>
+                    Current Phase: <strong style={{ color: '#9A7BF0' }}>{cycleInfo.phase}</strong> (Day {cycleInfo.currentDay}) • Next cycle in approx. <strong>{cycleInfo.daysUntilNext} days</strong>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '13px', color: '#7A8A85' }}>Set your last period date to track your hormonal phases.</div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <input
+                  type="date"
+                  value={lastPeriodDate}
+                  onChange={(e) => setLastPeriodDate(e.target.value)}
+                  style={{ padding: '6px 12px', borderRadius: '14px', border: '1px solid #E5E2D8', fontSize: '12px', outline: 'none' }}
+                />
+                <select
+                  value={cycleLength}
+                  onChange={(e) => setCycleLength(parseInt(e.target.value, 10))}
+                  style={{ padding: '6px 10px', borderRadius: '14px', border: '1px solid #E5E2D8', fontSize: '12px', outline: 'none' }}
+                >
+                  {[21, 24, 26, 28, 30, 32, 35].map((days) => (
+                    <option key={days} value={days}>{days} Days Cycle</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {cycleInfo && (
+              <div style={{ marginTop: '12px', backgroundColor: '#FAF8F0', padding: '10px 16px', borderRadius: '12px', fontSize: '12px', color: '#2D3B36', fontStyle: 'italic' }}>
+                💡 {cycleInfo.description}
+              </div>
+            )}
+          </div>
+
+          {/* Top Logger Card */}
+          <div style={{ backgroundColor: '#FFFFFF', padding: '24px', borderRadius: '24px', marginBottom: '20px', border: '1px solid #EBE8DF', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ margin: 0, fontFamily: "'Playfair Display', Georgia, serif", fontSize: '20px', color: '#2D3B36', fontWeight: '600' }}>
                 Log Today's Symptoms & Metrics:
               </h3>
-              <input
-                type="text"
-                placeholder="🔍 Search symptoms..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ padding: '8px 16px', borderRadius: '20px', border: '1px solid #E5E2D8', fontSize: '12px', width: '200px', outline: 'none' }}
-              />
+              
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button 
+                  onClick={handleCopyLog} 
+                  style={{ padding: '6px 14px', borderRadius: '16px', border: '1px solid #9A7BF0', backgroundColor: '#EBE4F4', color: '#2D3B36', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  {copyNotice ? '✓ Copied!' : '📋 Copy Log'}
+                </button>
+                <button 
+                  onClick={handleResetLog} 
+                  style={{ padding: '6px 12px', borderRadius: '16px', border: '1px solid #EBE8DF', backgroundColor: '#FAF8F0', color: '#7A8A85', fontSize: '12px', cursor: 'pointer' }}
+                >
+                  Reset Today
+                </button>
+                <input
+                  type="text"
+                  placeholder="🔍 Search symptoms..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ padding: '8px 16px', borderRadius: '20px', border: '1px solid #E5E2D8', fontSize: '12px', width: '180px', outline: 'none' }}
+                />
+              </div>
             </div>
 
+            {/* Hydration Widget */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: '#EBF4F6', padding: '12px 20px', borderRadius: '16px', marginBottom: '18px' }}>
               <span style={{ fontSize: '22px' }}>💧</span>
               <div style={{ fontSize: '13px', color: '#2D3B36' }}>
@@ -888,6 +1057,7 @@ export default function App() {
               </div>
             </div>
 
+            {/* Categorized Symptom Chips */}
             <div style={{ maxHeight: '210px', overflowY: 'auto' }}>
               {SYMPTOM_CATEGORIES.map((cat, idx) => {
                 const filteredItems = cat.items.filter((item) =>
@@ -928,6 +1098,20 @@ export default function App() {
             </div>
           </div>
 
+          {/* Quick Questions Starter Bar */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
+            {QUICK_QUESTIONS.map((q, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleQuickQuestion(q)}
+                style={{ backgroundColor: '#FFFFFF', border: '1px solid #EBE8DF', borderRadius: '16px', padding: '6px 14px', fontSize: '12px', color: '#5A6B65', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
+              >
+                💬 {q}
+              </button>
+            ))}
+          </div>
+
+          {/* Chat Stream Window */}
           <div style={{ backgroundColor: '#FFFFFF', borderRadius: '24px', padding: '24px', height: '380px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px', border: '1px solid #EBE8DF', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
             {messages.map((msg, idx) => (
               <div key={idx} style={{ alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start', maxWidth: '78%' }}>
@@ -951,6 +1135,7 @@ export default function App() {
             {loading && <div style={{ color: '#8B5CF6', fontStyle: 'italic', fontSize: '13px', paddingLeft: '8px' }}>Sakhie is analyzing your request...</div>}
           </div>
 
+          {/* Form Input */}
           <form onSubmit={handleSend} style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
             <input
               type="text"
